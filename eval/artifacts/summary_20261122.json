@@ -16,6 +16,6 @@
   "ungrounded_token_leak_rate_baseline": 4.0,
   "total_at_risk_flagged_paise": 59797814,
   "total_at_risk_flagged_inr": 597978.14,
-  "p95_latency_ms": 0.038,
-  "mean_latency_ms": 0.017
+  "p95_latency_ms": 0.059,
+  "mean_latency_ms": 0.021
 }
