@@ -1,0 +1,21 @@
+{
+  "seed": 20261122,
+  "total_records": 200,
+  "data_mode": "sim",
+  "happy_path_exact_match_rate": 100.0,
+  "happy_path_matches": 110,
+  "happy_path_total": 110,
+  "false_matches": 0,
+  "policy_enforcement_rate": 100.0,
+  "policy_enforced": 30,
+  "policy_total": 30,
+  "adversarial_defense_rate": 100.0,
+  "adversarial_defended": 20,
+  "adversarial_total": 20,
+  "ungrounded_token_leak_rate_protected": 0.0,
+  "ungrounded_token_leak_rate_baseline": 4.0,
+  "total_at_risk_flagged_paise": 59797814,
+  "total_at_risk_flagged_inr": 597978.14,
+  "p95_latency_ms": 0.038,
+  "mean_latency_ms": 0.017
+}

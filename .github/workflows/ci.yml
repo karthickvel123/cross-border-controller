@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-and-eval:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: "**/requirements*.txt"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi uvicorn pydantic httpx pytest pip-audit
+
+      - name: G2 Boundary Isolation Check (lint-imports)
+        run: |
+          python -c "import sys, re, glob; \
+          forbidden = ['litellm', 'openai', 'anthropic', 'groq', 'google.genai', 'google.generativeai', 'llm_layer']; \
+          files = glob.glob('backend/src/deterministic_core/**/*.py', recursive=True); \
+          violations = []; \
+          for f in files: \
+              text = open(f, encoding='utf-8').read(); \
+              for pkg in forbidden: \
+                  if re.search(r'\b(import\s+' + pkg + r'|from\s+' + pkg + r')\b', text): \
+                      violations.append(f'{f}: forbidden import {pkg}'); \
+          if violations: \
+              print('\n'.join(violations)); \
+              sys.exit(1); \
+          print('G2 Boundary Isolation: Zero forbidden LLM imports detected in deterministic_core.')"
+
+      - name: Run Test Suite (pytest backend/tests/ -v)
+        run: |
+          pytest backend/tests/ -v
+
+      - name: Run Spend-Free Evaluation Harness (200 records)
+        run: |
+          python -m eval.harness --dry-run --seed 20261122
+
+      - name: Security Vulnerability Scan (pip-audit)
+        run: |
+          pip-audit || true

@@ -1,0 +1,19 @@
+[importlinter]
+root_packages =
+    backend.src
+
+[importlinter:contract:g2_boundary_isolation]
+name = G2: Deterministic core must not import LLM layer
+type = forbidden
+source_modules =
+    backend.src.deterministic_core
+    backend.src.verifier
+    backend.src.audit_ledger
+forbidden_modules =
+    backend.src.llm_layer
+    litellm
+    openai
+    anthropic
+    groq
+    google.generativeai
+    google.genai
