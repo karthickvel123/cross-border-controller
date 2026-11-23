@@ -5,6 +5,18 @@
 
 ---
 
+## V1 Implemented Scope vs. Production Blueprint
+
+| Architectural Component | V1 Implemented Scope (Demonstrated) | Production Target Blueprint |
+|---|---|---|
+| **Storage & Ledger** | SQLite WAL mode (`controller_ledger.db` for zero-Docker CI) | PostgreSQL 16 append-only tables (DDL in `docs/schema.sql`) |
+| **User Interface** | Zero-build Tailwind CSS & HTML inspector (`frontend/index.html`) | Next.js / React single-page dashboard application |
+| **Financial Rounding** | `Decimal` arithmetic with `ROUND_HALF_EVEN` banker's rounding (`fx_fees.py`) | Hardware-level integer subunit scaling & DB constraints |
+
+---
+
+---
+
 ## Table of Contents
 
 1. [High-Level Design (HLD)](#1-high-level-design)
@@ -129,7 +141,7 @@ residue              = recon_row.credit - net_credit_expected
 #### MoneySaver Export Account Path
 
 ```
-if gross_txn_paise < 10_000_000_00:   # < ₹1,00,000 (in paise)
+if gross_txn_paise < 10_000_000:       # < ₹1,00,000 (in paise)
     fee_paise       = 100_000          # ₹1,000 flat
     gst_on_fee      = 18_000           # ₹180
     total_deduction = 118_000          # ₹1,180

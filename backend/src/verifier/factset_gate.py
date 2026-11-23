@@ -21,11 +21,15 @@ from pydantic import BaseModel, Field
 
 # ── Regexes for entity IDs, UTRs, FETERS codes, and currency amounts ──────────
 _RAZORPAY_ID_RE = re.compile(
-    r"\b(?:pay|rfnd|trf|adj|order|setl)_[A-Za-z0-9]{8,20}\b"
+    r"\b(?:pay|rfnd|trf|adj|order|setl)_[A-Za-z0-9]{8,24}\b",
+    re.IGNORECASE,
 )
-_UTR_RE = re.compile(r"\bUTR[A-Z0-9]{6,22}\b")
-_FETERS_RE = re.compile(r"\b[PS]\d{4}\b")
-_RUPEE_RE = re.compile(r"((?:₹|INR\s?)\s*(\d[\d,]*(?:\.\d{1,2})?))")
+_UTR_RE = re.compile(r"\bUTR[A-Z0-9]{6,22}\b", re.IGNORECASE)
+_FETERS_RE = re.compile(r"\b[PS]\d{4}\b", re.IGNORECASE)
+_RUPEE_RE = re.compile(
+    r"((?:₹|INR\s?|Rs\.?\s?)\s*(\d[\d,]*(?:\.\d{1,2})?))",
+    re.IGNORECASE,
+)
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -124,6 +128,9 @@ def verify_hypothesis_against_factset(
     effective_allowed_entity_ids = set(factset.allowed_entity_ids)
     if factset.entity_id:
         effective_allowed_entity_ids.add(factset.entity_id)
+    allowed_entity_ids_lower = {e.lower() for e in effective_allowed_entity_ids}
+    allowed_utrs_upper = {u.upper() for u in factset.allowed_utrs}
+    allowed_feters_upper = {c.upper() for c in factset.allowed_feters_codes}
 
     # ── 1. Check explicit cited lists ─────────────────────────────────────────
     for amt in cited_amounts_paise:
@@ -133,38 +140,38 @@ def verify_hypothesis_against_factset(
                 ungrounded_tokens.append(token)
 
     for utr in cited_utrs:
-        if utr not in factset.allowed_utrs:
+        if utr not in factset.allowed_utrs and utr.upper() not in allowed_utrs_upper:
             if utr not in ungrounded_tokens:
                 ungrounded_tokens.append(utr)
 
     for eid in cited_entity_ids:
-        if eid not in effective_allowed_entity_ids:
+        if eid not in effective_allowed_entity_ids and eid.lower() not in allowed_entity_ids_lower:
             if eid not in ungrounded_tokens:
                 ungrounded_tokens.append(eid)
 
     for code in cited_feters_codes:
-        if code not in factset.allowed_feters_codes:
+        if code not in factset.allowed_feters_codes and code.upper() not in allowed_feters_upper:
             if code not in ungrounded_tokens:
                 ungrounded_tokens.append(code)
 
     # ── 2. Scan proposed_rationale for entity IDs ─────────────────────────────
     for m in _RAZORPAY_ID_RE.finditer(proposed_rationale):
         eid = m.group(0)
-        if eid not in effective_allowed_entity_ids:
+        if eid not in effective_allowed_entity_ids and eid.lower() not in allowed_entity_ids_lower:
             if eid not in ungrounded_tokens:
                 ungrounded_tokens.append(eid)
 
     # ── 3. Scan proposed_rationale for UTRs ───────────────────────────────────
     for m in _UTR_RE.finditer(proposed_rationale):
         utr = m.group(0)
-        if utr not in factset.allowed_utrs:
+        if utr not in factset.allowed_utrs and utr.upper() not in allowed_utrs_upper:
             if utr not in ungrounded_tokens:
                 ungrounded_tokens.append(utr)
 
     # ── 4. Scan proposed_rationale for FETERS purpose codes ───────────────────
     for m in _FETERS_RE.finditer(proposed_rationale):
         code = m.group(0)
-        if code not in factset.allowed_feters_codes:
+        if code not in factset.allowed_feters_codes and code.upper() not in allowed_feters_upper:
             if code not in ungrounded_tokens:
                 ungrounded_tokens.append(code)
 

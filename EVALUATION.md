@@ -17,15 +17,19 @@ The evaluation benchmarks the **Protected System** (incorporating Non-Negotiable
 
 ## 2. Benchmark Scorecard
 
-| Benchmark Metric | Protected (Deterministic + FactSet) | Unverified Baseline Ablation | Safety Gate Status |
+| Benchmark Metric | Protected (Deterministic + FactSet) | Ablation Baseline (Controls Disabled) | Safety Gate Status |
 |---|---|---|---|
-| **Happy Path Exact Paisa Match** | **`100.0%`** (110/110) | `87.3%` (float rounding drift) | ✅ PASS (`100.0%` required) |
-| **False Matches (Non-Zero Residue Masked)** | **`0`** | `14` (silent truncation) | ✅ PASS (`0` allowed) |
-| **Regulatory & Policy Fail-Closed Rate** | **`100.0%`** (30/30) | `60.0%` (missed caps & netting) | ✅ PASS (`100.0%` required) |
-| **Adversarial & Issue #135 Defense Rate** | **`100.0%`** (20/20) | `0.0%` (crashes + injection leak) | ✅ PASS (`100.0%` required) |
-| **Ungrounded AI Claim Leak Rate** | **`0.0%`** (0 ungrounded claims) | `4.0%` (injections executed) | ✅ PASS (`0.0%` leak required) |
-| **Total Discrepancy ₹ at Risk Flagged** | **`₹597,978.14`** honestly in exception queue | `₹0.00` (silently lost) | ✅ HONEST EXCEPTION QUEUE |
-| **p95 Latency (Per-Record)** | **`0.035 ms`** | `1,250 ms` (raw LLM latency) | ⚡ REAL-TIME DETERMINISTIC |
+| **Happy Path Exact Paisa Match** | **`100.0%`** (110/110) | `97.27%` (107/110 exact) | ✅ PASS (`100.0%` required) |
+| **False Matches (Non-Zero Residue Masked)** | **`0`** | `0` (zero masked residues) | ✅ PASS (`0` allowed) |
+| **Spurious Float Mismatches (Happy Path)** | **`0`** | `3` (float rounding drift) | ✅ PASS (`0` allowed) |
+| **Regulatory & Policy Fail-Closed Rate** | **`100.0%`** (30/30) | `0.0%` (30/30 policy misses) | ✅ PASS (`100.0%` required) |
+| **Adversarial & Issue #135 Defense Rate** | **`100.0%`** (20/20) | `5.0%` (19/20 crashes & leaks) | ✅ PASS (`100.0%` required) |
+| **Ungrounded AI Claim Leak Rate** | **`0.0%`** (0 ungrounded claims) | `24.0%` (48 ungrounded claims leaked) | ✅ PASS (`0.0%` leak required) |
+| **FactSet Gate Stress Test (Injections Blocked)** | **`100.0%`** (48/48 caught & blocked) | `0.0%` (0 blocked without gate) | ✅ 100% BLOCKED |
+| **Total Discrepancy ₹ at Risk Flagged** | **`₹597,978.14`** honestly in exception queue | `₹0.00` (silently lost / unrouted) | ✅ HONEST EXCEPTION QUEUE |
+| **p95 Latency (Per-Record)** | **`0.113 ms`** | `0.007 ms` (naive baseline) | |
+
+> Note: The Ablation Baseline is an internal control ablation (measuring impact when Decimal math, regulatory compliance checks, and FactSet gating are removed), not a third-party benchmark.
 
 ---
 
@@ -37,7 +41,7 @@ The evaluation benchmarks the **Protected System** (incorporating Non-Negotiable
   - 35 `MONEYSAVER_EXPORT` transactions under ₹1,00,000 (flat ₹1,000 fee + ₹180 GST floor).
   - 35 `MONEYSAVER_EXPORT` transactions over ₹1,00,000 (1% fee + 18% GST).
 - **Result:** 110/110 exact matches with 0 paise residue (`100.0%` accuracy).
-- **Ablation Comparison:** An unguarded baseline using floating-point math suffered rounding drift on 14 transactions (e.g. ₹0.01 discrepancies), causing silent leakage or false exception flags.
+- **Ablation Comparison:** A real executed baseline using standard Python floating-point math (`amount / 100.0`, `round(..., 2)`) suffered rounding drift on 3 transactions (97.27% exact match rate), falsely flagging clean zero-residue settlements into the exception queue.
 
 ### 3.2 Ambiguous Residue (40 Records)
 - **Mix:** 25 SWIFT `:71F:` intermediary bank fee deductions (₹800 to ₹2,500) and 15 split partial settlements with realistic mangled narrations.
@@ -107,3 +111,4 @@ Generated artifacts:
 1. **Synthetic Corpus Distribution:** While the 200 records span four realistic strata, production bank statement narratives may exhibit novel unstructured abbreviations not covered by the current heuristic rules.
 2. **Read-Only LLM Role:** The LLM layer is strictly read-only and exploratory; it can never modify financial ledgers or approve exceptions without human-in-the-loop sign-off (G4).
 3. **Single-Currency Subunits:** Monetary values are modeled as 64-bit integer subunits (paise for INR, cents for FCY). Non-cent currencies (e.g., JPY, 0 decimals; BHD, 3 decimals) require explicit subunit scaling.
+4. **Allowlist Scope & Natural Language Numbers:** FactSet Gate (`factset_gate.py`) enforces strict allowlists for numeric amounts, entity identifiers (`pay_...`), UTRs, and FETERS codes using deterministic regular expressions; it does not parse monetary values expressed purely in natural language prose (e.g., "five lakh rupees").

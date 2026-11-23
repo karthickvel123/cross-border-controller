@@ -2,9 +2,13 @@
 
 ## 1. One-Line Pitch & Clearly Demonstrable Goal
 
-> **One-Line Pitch:** Deterministic, tamper-evident cross-border settlement and regulatory routing controller combining exact integer arithmetic with bounded, FactSet-grounded AI—eliminating hallucinations, silent rounding losses, and regulatory drift.
+> **One-Line Pitch:** A deterministic, tamper-evident finance controller executing the **Cross-Border Settlement-to-Compliance loop for Indian Exporters**—pairing exact integer arithmetic with bounded, FactSet-grounded AI to eliminate hallucinations, silent rounding losses, and regulatory drift.
 
-**Goal:** Reconcile payouts across USD, EUR, GBP, SGD; enforce RBI PA-CB ₹25L caps, route >₹25L to Nov 2026 GIFT City IFSCA PSPs, ban netting, check Oct 2026 EDF/EDPMS (270d FCY/365d INR + ICICI pre-capture EDF), and compute FY 2026-27 Sec 394(1) LRS TCS (20% cliff & NRI exemptions)—flagging 100% of discrepancies into an honest queue with 0 ungrounded claims.
+**The Finance-Ops Loop:**
+- **Exact Payout Recon:** Ingests Razorpay settlements across USD, EUR, GBP, SGD; computes exact FX, fees (3% card / 1% MoneySaver), and 18% GST down to the exact paisa.
+- **Residue Investigation:** Detects non-zero residues (e.g. SWIFT intermediary deductions, split settlements) and routes them to a bounded, FactSet-grounded AI investigator with 0 ungrounded claims.
+- **Regulatory Routing:** Enforces RBI PA-CB ₹25L caps (routing >₹25L to GIFT City IFSCA PSPs), blocks netting, enforces pre-capture EDF/EDPMS export realization timelines, and calculates Section 394(1) LRS TCS slabs.
+- **Tamper-Evident Sign-off:** Requires atomic single-use human approval (G4) and commits all lifecycle actions to an append-only SHA-256 cryptographic audit chain (G5).
 
 ---
 
@@ -12,15 +16,19 @@
 
 Evaluated on 200 records (110 Happy, 40 Ambiguous, 30 Policy, 20 Adversarial):
 
-| Benchmark Metric | Protected (Ours) | Baseline Ablation | Safety Gate |
+| Benchmark Metric | Protected (Deterministic + FactSet) | Ablation Baseline (Controls Disabled) | Safety Gate Status |
 |---|---|---|---|
-| **Happy Path Match** | **`100.0%`** (110/110) | `87.3%` (float drift) | ✅ PASS (100%) |
-| **False Matches (Residue Masked)** | **`0`** | `14` (silent truncate) | ✅ PASS (0) |
-| **Regulatory & Policy Enforced** | **`100.0%`** (30/30) | `60.0%` (missed caps) | ✅ PASS (100%) |
-| **Adversarial & #135 Defense** | **`100.0%`** (20/20) | `0.0%` (crashes/leaks) | ✅ PASS (100%) |
-| **Ungrounded AI Claim Leak Rate** | **`0.0%`** (0 leaks) | `4.0%` (injections run) | ✅ PASS (0.0%) |
-| **Discrepancy ₹ at Risk** | **`₹597,978.14`** | `₹0.00` (silently lost) | ✅ HONEST QUEUE |
-| **p95 Latency (Per-Record)** | **`0.035 ms`** | `1,250 ms` (raw LLM) | ⚡ REAL-TIME |
+| **Happy Path Exact Paisa Match** | **`100.0%`** (110/110) | `97.27%` (107/110 exact) | ✅ PASS (100.0%) |
+| **False Matches (Non-Zero Residue Masked)** | **`0`** | `0` (zero masked residues) | ✅ PASS (0 allowed) |
+| **Spurious Float Mismatches (Happy Path)** | **`0`** | `3` (float rounding drift) | ✅ PASS (0 allowed) |
+| **Regulatory & Policy Fail-Closed Rate** | **`100.0%`** (30/30) | `0.0%` (30/30 policy misses) | ✅ PASS (100.0%) |
+| **Adversarial & Issue #135 Defense Rate** | **`100.0%`** (20/20) | `5.0%` (19/20 crashes & leaks) | ✅ PASS (100.0%) |
+| **Ungrounded AI Claim Leak Rate** | **`0.0%`** (0 ungrounded claims) | `24.0%` (48 ungrounded claims leaked) | ✅ PASS (0.0% leak) |
+| **FactSet Gate Stress Test (Injections Blocked)** | **`100.0%`** (48/48 caught & blocked) | `0.0%` (0 blocked without gate) | ✅ 100% BLOCKED |
+| **Total Discrepancy ₹ at Risk Flagged** | **`₹597,978.14`** honestly in exception queue | `₹0.00` (silently lost / unrouted) | ✅ HONEST QUEUE |
+| **p95 Latency (Per-Record)** | **`0.113 ms`** | `0.007 ms` (naive baseline) | |
+
+> Note: The Ablation Baseline is an internal control ablation (measuring impact when Decimal math, regulatory compliance checks, and FactSet gating are removed), not a third-party benchmark.
 
 ---
 
@@ -121,3 +129,24 @@ cross-border-controller/
 ├── AGENTS.md                           # Strict repository invariants and contract
 └── README.md                           # This document
 ```
+
+---
+
+## 7. Regulatory References
+
+The deterministic core models and validates compliance against official Indian regulatory and statutory frameworks:
+
+- **RBI Master Direction on Regulation of Payment Aggregators – Cross Border (PA-CB) ([rbi.org.in](https://www.rbi.org.in)):**
+  - Enforces the strict ₹25,00,000 (₹25 lakh) per-transaction cap on export and import transactions through PA-CB channels.
+  - Prohibits inward/outward netting (`netting_requested=True` fail-closed with `PACB_NO_NETTING_VIOLATION`).
+- **IFSCA (Payment Services) Regulations, 2024 ([ifsca.gov.in](https://ifsca.gov.in)):**
+  - Transactions exceeding the ₹25L PA-CB threshold or requiring foreign currency account retention are routed to `GIFT_CITY_IFSCA_PSP`.
+- **RBI Master Direction on Export of Goods and Services / EDPMS ([rbi.org.in](https://www.rbi.org.in)):**
+  - Tracks Export Declaration Form (EDF) and EDPMS realization timelines (270 days for foreign currency invoices, 365 days for INR invoices).
+  - Requires pre-capture EDF on ICICI MoneySaver Export accounts before capture.
+- **Income-tax Act, 2025 Section 394(1) (FY 2026-27 LRS TCS):**
+  - Models the ₹10,00,000 cumulative annual exemption threshold and the 20% TCS slab on remittances exceeding ₹10L.
+  - Honors the statutory 0% TCS exemption for NRI remittances from NRO balances up to $1M under FEMA Section 394(1).
+
+> **Configurable Policy Constants:** All regulatory limits (₹25L PA-CB cap, ₹10L TCS threshold, 20% TCS rate, 270d/365d EDPMS realization windows) and fee rate cards (3% card fee, 1% MoneySaver fee, 18% GST) are maintained as configurable deterministic constants in `backend/src/deterministic_core/` rather than hardcoded logic, enabling seamless updates as circulars evolve.
+

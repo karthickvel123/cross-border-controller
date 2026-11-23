@@ -178,6 +178,54 @@ def test_hallucinated_feters_code_abstained(clean_factset: FactSetSnapshot):
     assert "S9999" in result.ungrounded_tokens
 
 
+def test_case_insensitive_utr_abstained(clean_factset: FactSetSnapshot):
+    """Case-insensitive UTR (e.g. utrfake999999) must be caught and rejected."""
+    result = verify_hypothesis_against_factset(
+        proposed_rationale="Settlement processed via counterparty utrfake999999 in transaction narrative.",
+        cited_amounts_paise=[],
+        cited_utrs=[],
+        cited_entity_ids=[],
+        cited_feters_codes=[],
+        factset=clean_factset,
+    )
+
+    assert result.verified is False
+    assert result.status == "ABSTAINED_UNGROUNDED"
+    assert any("utrfake999999" in t.lower() for t in result.ungrounded_tokens)
+
+
+def test_indian_lakh_formatted_amount_abstained(clean_factset: FactSetSnapshot):
+    """Indian lakh-formatted figure (₹5,97,978) not in FactSet must be caught and rejected."""
+    result = verify_hypothesis_against_factset(
+        proposed_rationale="Deducted SWIFT charges of ₹5,97,978 against client payout.",
+        cited_amounts_paise=[],
+        cited_utrs=[],
+        cited_entity_ids=[],
+        cited_feters_codes=[],
+        factset=clean_factset,
+    )
+
+    assert result.verified is False
+    assert result.status == "ABSTAINED_UNGROUNDED"
+    assert any("5,97,978" in t for t in result.ungrounded_tokens)
+
+
+def test_near_miss_razorpay_id_abstained(clean_factset: FactSetSnapshot):
+    """1-digit-off near-miss Razorpay ID (pay_87654322 vs allowed pay_87654321) must be rejected."""
+    result = verify_hypothesis_against_factset(
+        proposed_rationale="Discrepancy linked to near-miss entity pay_87654322.",
+        cited_amounts_paise=[],
+        cited_utrs=[],
+        cited_entity_ids=[],
+        cited_feters_codes=[],
+        factset=clean_factset,
+    )
+
+    assert result.verified is False
+    assert result.status == "ABSTAINED_UNGROUNDED"
+    assert "pay_87654322" in result.ungrounded_tokens
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # 4. Indirect Prompt Injection Isolation & Sanitization
 # ═════════════════════════════════════════════════════════════════════════════
