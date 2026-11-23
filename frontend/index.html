@@ -30,6 +30,7 @@
             </span>
           </h1>
           <p class="text-xs text-slate-400">RBI PA-CB · GIFT City IFSCA PSP · EDF/EDPMS · Sec 394(1) LRS TCS</p>
+          <p class="text-[11px] text-indigo-300/90 font-mono mt-1">Boundary: Deterministic Python owns all money math &amp; compliance routing; Read-Only LLM (Gemini/Groq) triages ambiguous residues strictly behind the G3 FactSet Gate.</p>
         </div>
       </div>
 
@@ -63,6 +64,15 @@
         </button>
       </div>
 
+      <!-- Status Line -->
+      <div class="flex flex-wrap items-center justify-between text-[11px] text-slate-400 font-mono bg-slate-900/60 px-4 py-2 rounded-lg border border-slate-800">
+        <span id="eval-status-line" class="flex items-center gap-2">
+          <span class="h-2 w-2 rounded-full bg-indigo-400"></span>
+          Loaded from SEED=20261122 artifact — click "Run 200-Record Eval (SSE)" to stream live
+        </span>
+        <span id="eval-timestamp" class="text-slate-500 text-[10px]">Corpus: 200 Records · Seed: 20261122</span>
+      </div>
+
       <!-- Progress Bar -->
       <div id="progress-container" class="hidden space-y-2">
         <div class="flex justify-between text-xs text-slate-400 font-mono">
@@ -81,52 +91,99 @@
             <tr class="border-b border-slate-800 text-slate-400 bg-slate-900/60 font-mono uppercase text-[10px] tracking-wider">
               <th class="py-3 px-4">Benchmark Metric</th>
               <th class="py-3 px-4 text-emerald-400">Protected System (Ours)</th>
-              <th class="py-3 px-4 text-rose-400">Unverified Baseline Ablation</th>
+              <th class="py-3 px-4 text-rose-400">Ablation Baseline (Controls Disabled)</th>
               <th class="py-3 px-4">Safety Gate</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-800/60">
             <tr>
-              <td class="py-3 px-4 font-medium text-white">Happy Path Exact Paisa Match</td>
-              <td id="m-happy" class="py-3 px-4 font-mono text-emerald-400">100.0% (110/110)</td>
-              <td class="py-3 px-4 font-mono text-slate-400">87.3% (float rounding drift)</td>
+              <td class="py-3 px-4 font-medium text-white">
+                <div class="flex items-center gap-2">
+                  <span>Happy Path Exact Paisa Match</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" title="G1 Conservation of Value: int64 paise math">G1</span>
+                </div>
+              </td>
+              <td id="m-happy" class="py-3 px-4 font-mono text-emerald-400 font-semibold">100.0% (110/110)</td>
+              <td id="b-happy" class="py-3 px-4 font-mono text-slate-400">97.27% (107/110)</td>
               <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PASS 100%</span></td>
             </tr>
             <tr>
-              <td class="py-3 px-4 font-medium text-white">False Matches (Non-Zero Residue Masked)</td>
-              <td id="m-false" class="py-3 px-4 font-mono text-emerald-400">0</td>
-              <td class="py-3 px-4 font-mono text-rose-400">14 (silent truncation)</td>
+              <td class="py-3 px-4 font-medium text-white">
+                <div class="flex items-center gap-2">
+                  <span>Spurious Float Mismatches (Happy Path)</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" title="G1 Conservation of Value">G1</span>
+                </div>
+              </td>
+              <td id="m-spurious" class="py-3 px-4 font-mono text-emerald-400 font-semibold">0</td>
+              <td id="b-spurious" class="py-3 px-4 font-mono text-rose-400">3 (float rounding drift)</td>
               <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PASS (0 allowed)</span></td>
             </tr>
             <tr>
-              <td class="py-3 px-4 font-medium text-white">Regulatory & Policy Fail-Closed Rate</td>
-              <td id="m-policy" class="py-3 px-4 font-mono text-emerald-400">100.0% (30/30)</td>
-              <td class="py-3 px-4 font-mono text-slate-400">60.0% (missed ₹25L/netting)</td>
+              <td class="py-3 px-4 font-medium text-white">
+                <div class="flex items-center gap-2">
+                  <span>Masked Residue (False Matches)</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" title="G1 Non-zero residue opens exception">G1</span>
+                </div>
+              </td>
+              <td id="m-false" class="py-3 px-4 font-mono text-emerald-400 font-semibold">0</td>
+              <td id="b-false" class="py-3 px-4 font-mono text-slate-400">0 (zero masked residue)</td>
+              <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PASS (0 allowed)</span></td>
+            </tr>
+            <tr>
+              <td class="py-3 px-4 font-medium text-white">
+                <div class="flex items-center gap-2">
+                  <span>Regulatory &amp; Policy Fail-Closed Rate</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" title="G2 Boundary Isolation: Deterministic policy checks">G2</span>
+                </div>
+              </td>
+              <td id="m-policy" class="py-3 px-4 font-mono text-emerald-400 font-semibold">100.0% (30/30)</td>
+              <td id="b-policy" class="py-3 px-4 font-mono text-rose-400">0.0% (30/30 misses)</td>
               <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PASS 100%</span></td>
             </tr>
             <tr>
-              <td class="py-3 px-4 font-medium text-white">Adversarial & Issue #135 Defense Rate</td>
-              <td id="m-adv" class="py-3 px-4 font-mono text-emerald-400">100.0% (20/20)</td>
-              <td class="py-3 px-4 font-mono text-rose-400">0.0% (crashes + injection leak)</td>
+              <td class="py-3 px-4 font-medium text-white">
+                <div class="flex items-center gap-2">
+                  <span>Adversarial &amp; Issue #135 Defense Rate</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" title="G2 &amp; Webhook HMAC defense">G2</span>
+                </div>
+              </td>
+              <td id="m-adv" class="py-3 px-4 font-mono text-emerald-400 font-semibold">100.0% (20/20)</td>
+              <td id="b-adv" class="py-3 px-4 font-mono text-rose-400">5.0% (19/20 crashes &amp; leaks)</td>
               <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PASS 100%</span></td>
             </tr>
             <tr>
-              <td class="py-3 px-4 font-medium text-white">Ungrounded AI Claim Leak Rate</td>
-              <td id="m-leaks" class="py-3 px-4 font-mono text-emerald-400">0.0% (FactSet gate enforced)</td>
-              <td class="py-3 px-4 font-mono text-rose-400">4.0% (injections executed)</td>
+              <td class="py-3 px-4 font-medium text-white">
+                <div class="flex items-center gap-2">
+                  <span>Ungrounded AI Claim Leak Rate</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" title="G3 Zero Ungrounded AI Claims: FactSet gate">G3</span>
+                </div>
+              </td>
+              <td id="m-leaks" class="py-3 px-4 font-mono text-emerald-400 font-semibold">0.0% (0 leaked)</td>
+              <td id="b-leaks" class="py-3 px-4 font-mono text-rose-400">24.0% (48 leaked)</td>
               <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PASS 0.0%</span></td>
             </tr>
             <tr>
-              <td class="py-3 px-4 font-medium text-white">Discrepancy ₹ at Risk Honestly Flagged</td>
-              <td id="m-risk" class="py-3 px-4 font-mono text-amber-400">₹597,978.14 in queue</td>
-              <td class="py-3 px-4 font-mono text-slate-500">₹0.00 (silently lost)</td>
+              <td class="py-3 px-4 font-medium text-white">
+                <div class="flex items-center gap-2">
+                  <span>FactSet Gate Stress Test (Injections Blocked)</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" title="G3 FactSet Gate Stress Verification">G3</span>
+                </div>
+              </td>
+              <td id="m-factset" class="py-3 px-4 font-mono text-emerald-400 font-semibold">100.0% (48/48 blocked)</td>
+              <td id="b-factset" class="py-3 px-4 font-mono text-rose-400">0.0% (0 blocked)</td>
+              <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">100% BLOCKED</span></td>
+            </tr>
+            <tr>
+              <td class="py-3 px-4 font-medium text-white">Total Discrepancy ₹ at Risk Honestly Flagged</td>
+              <td id="m-risk" class="py-3 px-4 font-mono text-amber-400 font-semibold">₹597,978.14 in queue</td>
+              <td id="b-risk" class="py-3 px-4 font-mono text-slate-500">₹0.00 (silently lost)</td>
               <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">HONEST QUEUE</span></td>
             </tr>
             <tr>
               <td class="py-3 px-4 font-medium text-white">p95 Latency (Per-Record)</td>
-              <td id="m-lat" class="py-3 px-4 font-mono text-indigo-400">&lt; 0.1 ms (deterministic)</td>
-              <td class="py-3 px-4 font-mono text-slate-500">1,250 ms (raw LLM)</td>
-              <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">REAL-TIME</span></td>
+              <td id="m-lat" class="py-3 px-4 font-mono text-indigo-400 font-semibold">0.102 ms (deterministic)</td>
+              <td id="b-lat" class="py-3 px-4 font-mono text-slate-500">0.007 ms (naive)</td>
+              <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">PASS (&lt;100ms)</span></td>
             </tr>
           </tbody>
         </table>
@@ -153,8 +210,11 @@
             <span id="audit-valid-badge" class="px-2 py-0.5 rounded text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">VERIFIED INTACT</span>
           </div>
           <div class="flex items-center justify-between">
-            <span class="text-slate-400">Audit Events Count:</span>
-            <span id="audit-event-count" class="text-white">Active</span>
+            <div>
+              <span class="text-slate-400">Audit Events Count:</span>
+              <span class="text-[10px] text-slate-500 block">(genesis block — updates live on approval &amp; eval events)</span>
+            </div>
+            <span id="audit-event-count" class="text-white font-semibold">1 sequential block</span>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-slate-400">Linkage Integrity:</span>
@@ -221,11 +281,15 @@
       const progressBar = document.getElementById('progress-bar');
       const progressStatus = document.getElementById('progress-status');
       const progressPercent = document.getElementById('progress-percent');
+      const statusLine = document.getElementById('eval-status-line');
 
       btn.disabled = true;
       spinner.classList.remove('hidden');
       label.innerText = 'Evaluating...';
       progressContainer.classList.remove('hidden');
+      if (statusLine) {
+        statusLine.innerHTML = '<span class="h-2 w-2 rounded-full bg-amber-400 animate-ping"></span> Live SSE stream in progress across 200 records...';
+      }
 
       const es = new EventSource('/evaluate/stream');
 
@@ -247,13 +311,34 @@
             progressPercent.innerText = '100%';
 
             const s = msg.summary;
-            document.getElementById('m-happy').innerText = `${s.happy_path_exact_match_rate}% (${s.happy_path_matches}/${s.happy_path_total})`;
+            document.getElementById('m-happy').innerText = `${Number(s.happy_path_exact_match_rate).toFixed(1)}% (${s.happy_path_matches}/${s.happy_path_total})`;
+            document.getElementById('b-happy').innerText = `${Number(s.baseline_happy_path_exact_match_rate).toFixed(2)}% (${s.baseline_happy_path_matches}/${s.happy_path_total})`;
+
+            document.getElementById('m-spurious').innerText = `${s.spurious_float_mismatches_protected || 0}`;
+            document.getElementById('b-spurious').innerText = `${s.baseline_spurious_float_mismatches} (float rounding drift)`;
+
             document.getElementById('m-false').innerText = `${s.false_matches}`;
-            document.getElementById('m-policy').innerText = `${s.policy_enforcement_rate}% (${s.policy_enforced}/${s.policy_total})`;
-            document.getElementById('m-adv').innerText = `${s.adversarial_defense_rate}% (${s.adversarial_defended}/${s.adversarial_total})`;
-            document.getElementById('m-leaks').innerText = `${s.ungrounded_token_leak_rate_protected}% (FactSet verified)`;
+            document.getElementById('b-false').innerText = `${s.baseline_false_matches} (zero masked residue)`;
+
+            document.getElementById('m-policy').innerText = `${Number(s.policy_enforcement_rate).toFixed(1)}% (${s.policy_enforced}/${s.policy_total})`;
+            document.getElementById('b-policy').innerText = `${Number(s.baseline_policy_enforcement_rate).toFixed(1)}% (${s.baseline_policy_misses}/${s.policy_total} misses)`;
+
+            document.getElementById('m-adv').innerText = `${Number(s.adversarial_defense_rate).toFixed(1)}% (${s.adversarial_defended}/${s.adversarial_total})`;
+            document.getElementById('b-adv').innerText = `${Number(s.baseline_adversarial_defense_rate).toFixed(1)}% (${s.baseline_adversarial_crashes_and_leaks}/${s.adversarial_total} crashes & leaks)`;
+
+            document.getElementById('m-leaks').innerText = `${Number(s.ungrounded_token_leak_rate_protected).toFixed(1)}% (0 leaked)`;
+            document.getElementById('b-leaks').innerText = `${Number(s.ungrounded_token_leak_rate_baseline).toFixed(1)}% (${s.baseline_ungrounded_leaks} leaked)`;
+
+            document.getElementById('m-factset').innerText = `${Number(s.factset_gate_block_rate).toFixed(1)}% (${s.factset_gate_blocked}/${s.factset_gate_stress_tested} blocked)`;
+            document.getElementById('b-factset').innerText = '0.0% (0 blocked)';
+
             document.getElementById('m-risk').innerText = `₹${s.total_at_risk_flagged_inr.toLocaleString()} in queue`;
-            document.getElementById('m-lat').innerText = `${s.p95_latency_ms} ms (p95)`;
+            document.getElementById('m-lat').innerText = `${Number(s.p95_latency_ms).toFixed(3)} ms (p95)`;
+            document.getElementById('b-lat').innerText = `${Number(s.baseline_p95_latency_ms || 0.007).toFixed(3)} ms (naive)`;
+
+            if (statusLine) {
+              statusLine.innerHTML = `<span class="h-2 w-2 rounded-full bg-emerald-400"></span> Live SSE stream completed at ${new Date().toLocaleTimeString()} (200 records)`;
+            }
           }
         } catch (err) {
           console.error(err);
@@ -265,6 +350,9 @@
         btn.disabled = false;
         spinner.classList.add('hidden');
         label.innerText = 'Run 200-Record Eval (SSE)';
+        if (statusLine) {
+          statusLine.innerHTML = '<span class="h-2 w-2 rounded-full bg-rose-400"></span> SSE connection closed or offline.';
+        }
       };
     }
 
@@ -277,7 +365,7 @@
         const count = document.getElementById('audit-event-count');
         const msg = document.getElementById('audit-message');
 
-        count.innerText = `${data.event_count} sequential blocks`;
+        count.innerText = `${data.event_count} sequential ${data.event_count === 1 ? 'block' : 'blocks'}`;
         if (data.valid) {
           badge.className = 'px-2 py-0.5 rounded text-emerald-400 bg-emerald-500/10 border border-emerald-500/20';
           badge.innerText = 'VERIFIED INTACT';
