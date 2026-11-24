@@ -12,8 +12,8 @@ Enforces RBI Master Direction on Cross-Border Payment Aggregators (PA-CB) and IF
   * MoneySaver export accounts into ICICI Bank require pre-capture EDF.
 """
 
-from typing import Annotated, Literal
-from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from typing import Literal
+from pydantic import BaseModel, ConfigDict
 
 # Threshold constants in paise
 PACB_MAX_TX_PAISE: int = 250_000_000         # ₹25,00,000 in paise

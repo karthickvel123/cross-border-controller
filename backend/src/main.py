@@ -19,13 +19,12 @@ import asyncio
 import json
 import os
 import sqlite3
-import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
-from fastapi import FastAPI, Header, HTTPException, Request, Response, status
+from fastapi import FastAPI, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
@@ -44,43 +43,37 @@ from eval.corpus_generator import DEFAULT_SEED, generate_corpus
 from eval.harness import run_eval_harness
 
 DB_PATH = os.getenv("DATABASE_PATH", "controller_ledger.db")
-WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "whsec_test_secret_corp_20261122")
 DATA_MODE = os.getenv("DATA_MODE", "sim")
+WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "whsec_test_secret_corp_20261122")
 
 # Demo tokens for the UI
 SAMPLE_TOKEN = "token-rec-0042-approval"
 SAMPLE_ENTITY = "pay_98765432"
 
+_db_initialized = False
 
-def _get_db() -> sqlite3.Connection:
+
+def _get_webhook_secret() -> str:
+    """Resolve webhook secret.
+
+    In live mode: fail closed (empty secret -> 503) if RAZORPAY_WEBHOOK_SECRET is unset.
+    In sim mode: use predictable default test secret.
+    """
+    raw_secret = os.getenv("RAZORPAY_WEBHOOK_SECRET")
+    if raw_secret:
+        return raw_secret
+    if os.getenv("DATA_MODE", "sim") == "live":
+        return ""  # fail closed -> 503 WEBHOOK_SECRET_UNCONFIGURED
+    return "whsec_test_secret_corp_20261122"
+
+
+def init_db() -> None:
+    """Initialize database schemas and seed genesis bootstrap records idempotently."""
+    global _db_initialized
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    init_approval_schema(conn)
-    init_chain_schema(conn)
-    # Ensure genesis event exists if empty
-    count = conn.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0]
-    if count == 0:
-        append_event(
-            conn,
-            event_type="SYSTEM_BOOTSTRAP",
-            payload={"mode": DATA_MODE, "version": "1.0.0"},
-            timestamp_iso=datetime.now(timezone.utc).isoformat(),
-        )
-    return conn
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Bootstrap DB schema & seed demo data if empty
-    conn = _get_db()
     try:
-        # Seed initial pending approval if not present
-        row = conn.execute(
-            "SELECT COUNT(*) FROM exception_approvals WHERE approval_token = ?",
-            (SAMPLE_TOKEN,),
-        ).fetchone()
-        if row and row[0] == 0:
-            expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
-            create_pending_approval(conn, SAMPLE_TOKEN, SAMPLE_ENTITY, expires_at)
+        init_approval_schema(conn)
+        init_chain_schema(conn)
 
         # Seed initial audit chain event if empty
         chain_count = conn.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0]
@@ -91,8 +84,39 @@ async def lifespan(app: FastAPI):
                 payload={"mode": DATA_MODE, "version": "1.0.0"},
                 timestamp_iso=datetime.now(timezone.utc).isoformat(),
             )
+
+        # Seed initial pending approval if not present
+        row = conn.execute(
+            "SELECT COUNT(*) FROM exception_approvals WHERE approval_token = ?",
+            (SAMPLE_TOKEN,),
+        ).fetchone()
+        if row and row[0] == 0:
+            expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+            create_pending_approval(
+                conn,
+                SAMPLE_TOKEN,
+                SAMPLE_ENTITY,
+                expires_at,
+                discrepancy_paise=1850,
+                category="SWIFT_INTERMEDIARY_FEE",
+            )
+
+        _db_initialized = True
     finally:
         conn.close()
+
+
+def _get_db() -> sqlite3.Connection:
+    """Obtain SQLite connection without executing DDL / table scans on every request."""
+    if not _db_initialized:
+        init_db()
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Bootstrap DB schema & seed demo data idempotently at startup
+    init_db()
     yield
 
 
@@ -106,7 +130,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -132,10 +156,11 @@ async def handle_razorpay_webhook(
     Returns exact HTTP status: 503, 400, 401, or 200.
     """
     raw_body = await request.body()
+    secret = _get_webhook_secret()
     valid, http_status, reason = verify_razorpay_webhook(
         raw_body=raw_body,
         signature=x_razorpay_signature,
-        webhook_secret=WEBHOOK_SECRET,
+        webhook_secret=secret,
     )
     return JSONResponse(
         status_code=http_status,
@@ -162,8 +187,8 @@ async def evaluate_stream() -> StreamingResponse:
                 yield f"data: {json.dumps({'type': 'progress', 'current': i, 'total': total, 'record_id': rec['record_id'], 'stratum': rec['stratum']})}\n\n"
                 await asyncio.sleep(0.01)
 
-        # Run full harness and emit final scorecard
-        summary = run_eval_harness(seed=DEFAULT_SEED, dry_run=True)
+        # Run full harness via threadpool so event loop is not blocked
+        summary = await asyncio.to_thread(run_eval_harness, seed=DEFAULT_SEED, dry_run=True)
         yield f"data: {json.dumps({'type': 'summary', 'summary': summary})}\n\n"
 
     return StreamingResponse(
@@ -235,11 +260,12 @@ def approve_exception(approval_token: str) -> JSONResponse:
 
 @app.get("/exceptions")
 def list_exceptions() -> list[dict[str, Any]]:
-    """Return active exceptions queue for frontend inspection."""
+    """Return active exceptions queue for frontend inspection with ledger metadata."""
     conn = _get_db()
     try:
         rows = conn.execute(
-            "SELECT approval_token, entity_id, status, expires_at, reviewed_by, reviewed_at FROM exception_approvals"
+            "SELECT approval_token, entity_id, status, expires_at, reviewed_by, reviewed_at, discrepancy_paise, category "
+            "FROM exception_approvals"
         ).fetchall()
         return [
             {
@@ -249,8 +275,9 @@ def list_exceptions() -> list[dict[str, Any]]:
                 "expires_at": r[3],
                 "reviewed_by": r[4],
                 "reviewed_at": r[5],
-                "discrepancy_inr": 18.50,
-                "category": "SWIFT_INTERMEDIARY_FEE",
+                "discrepancy_paise": r[6] if len(r) > 6 and r[6] is not None else 0,
+                "discrepancy_inr": round((r[6] if len(r) > 6 and r[6] is not None else 0) / 100.0, 2),
+                "category": r[7] if len(r) > 7 and r[7] is not None else "UNSPECIFIED",
             }
             for r in rows
         ]

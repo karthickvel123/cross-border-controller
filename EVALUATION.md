@@ -27,7 +27,7 @@ The evaluation benchmarks the **Protected System** (incorporating Non-Negotiable
 | **Ungrounded AI Claim Leak Rate** | **`0.0%`** (0 ungrounded claims) | `24.0%` (48 ungrounded claims leaked) | ✅ PASS (`0.0%` leak required) |
 | **FactSet Gate Stress Test (Injections Blocked)** | **`100.0%`** (48/48 caught & blocked) | `0.0%` (0 blocked without gate) | ✅ 100% BLOCKED |
 | **Total Discrepancy ₹ at Risk Flagged** | **`₹597,978.14`** honestly in exception queue | `₹0.00` (silently lost / unrouted) | ✅ HONEST EXCEPTION QUEUE |
-| **p95 Latency (Per-Record)** | **`0.113 ms`** | `0.007 ms` (naive baseline) | |
+| **p95 Latency (Per-Record)** | **`0.092 ms`** | `0.007 ms` (naive baseline) | |
 
 > Note: The Ablation Baseline is an internal control ablation (measuring impact when Decimal math, regulatory compliance checks, and FactSet gating are removed), not a third-party benchmark.
 

@@ -8,8 +8,8 @@ Security guarantees:
   * Untrusted narration is wrapped inside an unpredictable XML boundary tag.
   * System prompt instructs the model to ignore any instructions inside the tag.
   * DATA_MODE=sim runs deterministic heuristic analysis without external APIs.
-  * Live mode calls litellm.completion with JSON mode and degrades gracefully
-    to ABSTAINED on any error or timeout.
+  * Live mode calls litellm.completion (or Gemini REST fallback via httpx) with JSON mode,
+    enforcing a strict 15.0s timeout and degrading gracefully to ABSTAINED on any error.
   * Output is ALWAYS validated via verify_hypothesis_against_factset; if verification
     fails, proposed_category is forced to ABSTAINED.
 """
@@ -17,8 +17,11 @@ Security guarantees:
 from __future__ import annotations
 
 import json
+import logging
+import os
 import uuid
 from typing import Literal
+import httpx
 from pydantic import BaseModel, Field
 
 from backend.src.verifier.factset_gate import (
@@ -27,6 +30,8 @@ from backend.src.verifier.factset_gate import (
     verify_hypothesis_against_factset,
 )
 from backend.src.verifier.pii_redactor import redact_pci_and_pii
+
+logger = logging.getLogger(__name__)
 
 try:
     import litellm
@@ -56,7 +61,7 @@ class InvestigationHypothesis(BaseModel):
     verification: VerificationResult
 
 
-# ── Prompt builder ────────────────────────────────────────────────────────────
+# ── Prompt builder ────────────────────────────────────────────────────
 
 def build_isolated_prompt(
     untrusted_narration: str,
@@ -126,7 +131,7 @@ def investigate_residue(
     untrusted_narration:
         Raw narrative or counterparty message.
     data_mode:
-        "sim" for zero-API deterministic fallback; "live" for litellm.completion.
+        "sim" for zero-API deterministic fallback; "live" for LLM investigation.
     model_id:
         Model identifier string.
     pan_hmac_key:
@@ -151,24 +156,54 @@ def investigate_residue(
 
     if data_mode == "live":
         try:
-            # Check litellm availability
+            # Check litellm availability (or test mock)
             active_litellm = litellm
             if active_litellm is None:
-                import litellm as active_litellm  # type: ignore[no-redef]
+                try:
+                    import litellm as active_litellm  # type: ignore[no-redef]
+                except ImportError:
+                    active_litellm = None
 
             sys_prompt, usr_prompt = build_isolated_prompt(
                 untrusted_narration, factset, pan_hmac_key=pan_hmac_key
             )
-            response = active_litellm.completion(  # type: ignore[union-attr]
-                model=model_id,
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": usr_prompt},
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.0,
-            )
-            content = response.choices[0].message.content
+
+            if active_litellm is not None:
+                response = active_litellm.completion(  # type: ignore[union-attr]
+                    model=model_id,
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": usr_prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.0,
+                    timeout=15.0,
+                )
+                content = response.choices[0].message.content
+            else:
+                # Zero-dependency Gemini REST API fallback via httpx
+                gemini_api_key = os.getenv("GEMINI_API_KEY")
+                if not gemini_api_key:
+                    raise RuntimeError("Neither litellm nor GEMINI_API_KEY configured for live mode")
+
+                gemini_model = model_id if "gemini" in model_id.lower() else "gemini-2.5-flash"
+                endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={gemini_api_key}"
+
+                payload = {
+                    "contents": [
+                        {"role": "user", "parts": [{"text": f"{sys_prompt}\n\n{usr_prompt}"}]}
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.0,
+                        "responseMimeType": "application/json",
+                    },
+                }
+                with httpx.Client(timeout=15.0) as client:
+                    resp = client.post(endpoint, json=payload)
+                    resp.raise_for_status()
+                    res_json = resp.json()
+                    content = res_json["candidates"][0]["content"]["parts"][0]["text"]
+
             data = json.loads(content)
             raw_cat = data.get("proposed_category", "ABSTAINED")
             valid_cats = {
@@ -185,7 +220,12 @@ def investigate_residue(
             cited_entity_ids = [str(e) for e in data.get("cited_entity_ids", [])]
             cited_feters_codes = [str(c) for c in data.get("cited_feters_codes", [])]
 
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Live LLM investigation failed [%s]: %s; abstaining.",
+                type(exc).__name__,
+                exc,
+            )
             # Degrade gracefully on any LLM provider failure, timeout, or missing key
             category = "ABSTAINED"
             rationale = "Live LLM investigation unavailable or failed; abstaining."

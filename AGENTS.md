@@ -25,146 +25,66 @@
 cross-border-controller/
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml                          # Main CI pipeline
-│       └── eval.yml                        # Eval harness workflow
+│       └── ci.yml                          # Main CI pipeline
+├── .env.example                            # Example environment variables
+├── .gitignore                              # Git ignore rules
 ├── .importlinter                           # G2 boundary enforcement config
-├── .gitleaks.toml                          # Secret scanning config
-├── Makefile                                # Top-level make targets
-├── docker-compose.yml                      # PostgreSQL 16 + API + UI
-├── pyproject.toml                          # Python project config (ruff, mypy, pytest)
-├── requirements.txt                        # Pinned production deps
-├── requirements-dev.txt                    # Dev/test deps (pytest, hypothesis, etc.)
+├── Makefile                                # Top-level make targets (test, eval-dry, etc.)
+├── pytest.ini                              # Pytest root discovery configuration
+├── requirements.txt                        # Pinned runtime dependencies
+├── requirements-dev.txt                    # Development and test dependencies
 │
-├── ARCHITECTURE.md                         # ← You are here (sibling)
-├── AGENTS.md                               # ← This file
+├── ARCHITECTURE.md                         # Blueprint vs V1 mapping & technical architecture
+├── AGENTS.md                               # Repository invariants, rules, and contracts (this file)
+├── EVALUATION.md                           # Empirical benchmark report (200 records, SEED=20261122)
+├── README.md                               # Project pitch, architecture deep-dive & regulatory references
 │
 ├── backend/
 │   ├── src/
-│   │   ├── __init__.py
-│   │   ├── main.py                         # FastAPI app entrypoint
-│   │   ├── config.py                       # Settings (DATA_MODE, DB URL, etc.)
-│   │   │
+│   │   ├── main.py                         # FastAPI app entrypoint & endpoints
 │   │   ├── deterministic_core/             # ★ G2-ISOLATED: Zero LLM imports
 │   │   │   ├── __init__.py
-│   │   │   ├── recon_engine.py             # Settlement matching & residue detection
-│   │   │   ├── fx_fee_separator.py         # FX/Fee/GST integer arithmetic
-│   │   │   ├── compliance_router.py        # PA-CB / IFSCA / EDF / EDPMS routing
-│   │   │   ├── lrs_tcs_calculator.py       # Section 394(1) TCS slab computation
-│   │   │   ├── edf_edpms_generator.py      # Closure pack generation
-│   │   │   ├── approval_lock.py            # G4 atomic conditional update
-│   │   │   ├── audit_chain.py              # G5 SHA-256 hash chain writer
-│   │   │   ├── webhook_verifier.py         # HMAC verification (Issue #135 safe)
-│   │   │   ├── pan_redactor.py             # Luhn check + HMAC-SHA256 masking
-│   │   │   ├── money.py                    # int64 paise/cents type + operations
-│   │   │   └── feters_codes.py             # Reference table for FETERS purpose codes
-│   │   │
-│   │   ├── llm_layer/                      # Read-only investigation layer
+│   │   │   ├── compliance_router.py        # PA-CB, GIFT City IFSCA, and EDF/EDPMS routing
+│   │   │   ├── fx_fees.py                  # Exact Razorpay card & MoneySaver pricing arithmetic
+│   │   │   ├── lrs_tcs.py                  # Section 394(1) LRS TCS 20% slab computation
+│   │   │   └── schemas.py                  # Strict Pydantic v2 integer models
+│   │   ├── verifier/                       # Security & verification layer
 │   │   │   ├── __init__.py
-│   │   │   ├── investigator.py             # Residue investigation orchestrator
-│   │   │   ├── factset_verifier.py         # Verbatim token verification gate
-│   │   │   ├── prompt_builder.py           # XML-tag isolated prompt construction
-│   │   │   └── litellm_router.py           # Provider-agnostic LLM routing
-│   │   │
-│   │   ├── api/                            # FastAPI route handlers
+│   │   │   ├── factset_gate.py             # G3 Verbatim FactSet Provenance Gate
+│   │   │   ├── pii_redactor.py             # PCI card Luhn check, CVV, and PAN HMAC masking
+│   │   │   └── webhook_security.py         # Webhook HMAC verification (Issue #135 fix)
+│   │   ├── audit_ledger/                   # Ledger & lock engines
 │   │   │   ├── __init__.py
-│   │   │   ├── webhooks.py                 # POST /webhooks/razorpay
-│   │   │   ├── recon.py                    # GET /recon, POST /recon/trigger
-│   │   │   ├── exceptions.py               # GET/POST /exceptions, approval flow
-│   │   │   ├── compliance.py               # GET /compliance/status
-│   │   │   ├── audit.py                    # GET /audit/chain, /audit/verify
-│   │   │   ├── evaluate.py                 # SSE /evaluate stream
-│   │   │   └── health.py                   # GET /health
-│   │   │
-│   │   ├── models/                         # Pydantic v2 strict models
-│   │   │   ├── __init__.py
-│   │   │   ├── razorpay.py                 # Razorpay API response models
-│   │   │   ├── recon.py                    # Recon row models
-│   │   │   ├── compliance.py               # Compliance classification models
-│   │   │   ├── exceptions.py               # Exception models
-│   │   │   └── audit.py                    # Audit event models
-│   │   │
-│   │   └── db/                             # Database layer
+│   │   │   ├── approval_lock.py            # G4 atomic approval lock (SQLite WAL)
+│   │   │   └── hash_chain.py               # G5 append-only SHA-256 audit chain
+│   │   └── llm_layer/                      # Read-only investigation layer
 │   │       ├── __init__.py
-│   │       ├── connection.py               # Async connection pool (PG) / SQLite WAL
-│   │       ├── migrations/                 # Alembic or raw SQL migrations
-│   │       │   └── 001_initial.sql         # → mirrors docs/schema.sql
-│   │       └── queries/                    # Named SQL queries (no ORM)
-│   │           ├── recon.sql
-│   │           ├── exceptions.sql
-│   │           ├── compliance.sql
-│   │           └── audit.sql
-│   │
+│   │       └── residue_investigator.py     # Residue analyzer with zero-key sim fallback
 │   └── tests/
-│       ├── conftest.py                     # Fixtures, DB setup, seed data
-│       ├── test_recon_engine.py
-│       ├── test_fx_fee_separator.py
-│       ├── test_compliance_router.py
-│       ├── test_lrs_tcs_calculator.py
-│       ├── test_edf_edpms_generator.py
-│       ├── test_approval_lock.py
-│       ├── test_audit_chain.py
-│       ├── test_webhook_verifier.py
-│       ├── test_pan_redactor.py
-│       ├── test_factset_verifier.py
-│       ├── test_money.py
-│       ├── test_api_webhooks.py
-│       ├── test_api_exceptions.py
-│       └── property/                       # Hypothesis property-based tests
-│           ├── test_conservation_of_value.py   # G1
-│           └── test_tcs_slab_monotonicity.py
-│
-├── frontend/
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── tailwind.config.ts
-│   ├── next.config.js
-│   ├── src/
-│   │   ├── app/
-│   │   │   ├── layout.tsx
-│   │   │   ├── page.tsx                    # Dashboard
-│   │   │   ├── recon/page.tsx              # Recon inspector
-│   │   │   ├── exceptions/page.tsx         # Exception queue + approval modal
-│   │   │   ├── compliance/page.tsx         # Compliance status
-│   │   │   ├── audit/page.tsx              # Hash chain verifier
-│   │   │   └── evaluate/page.tsx           # SSE /evaluate stream viewer
-│   │   ├── components/
-│   │   │   ├── DataModeBanner.tsx           # DATA_MODE=sim|live banner
-│   │   │   ├── ApprovalModal.tsx            # Human sign-off modal
-│   │   │   ├── AuditChainVerifier.tsx       # Client-side hash verification
-│   │   │   └── SSEStream.tsx                # /evaluate SSE consumer
-│   │   └── lib/
-│   │       ├── api.ts                       # Typed API client
-│   │       └── types.ts                     # Shared TypeScript types
-│   └── tests/
-│       └── ...
+│       ├── unit/
+│       │   ├── test_api.py                 # FastAPI endpoints tests
+│       │   ├── test_compliance_router.py   # PA-CB, IFSCA, and EDF/EDPMS compliance tests
+│       │   ├── test_eval_harness.py        # Corpus generation & harness tests
+│       │   ├── test_fx_fees.py             # FX, fees, GST integer arithmetic tests
+│       │   └── test_lrs_tcs.py             # LRS TCS slab monotonicity & exemption tests
+│       ├── concurrency/
+│       │   └── test_security_and_ledger.py # G4 20-thread race, G5 audit chain, webhooks, PII
+│       └── adversarial/
+│           └── test_factset_and_injection.py # G3 FactSet gate, prompt injection & timeout tests
 │
 ├── eval/
-│   ├── corpus/
-│   │   ├── seed_20261122.json
-│   │   ├── strata.yaml
-│   │   └── generators/
-│   │       ├── happy_path.py
-│   │       ├── ambiguous_residue.py
-│   │       ├── regulatory_failure.py
-│   │       └── adversarial.py
-│   ├── judges/
-│   │   ├── recon_accuracy_judge.py
-│   │   ├── compliance_judge.py
-│   │   ├── llm_grounding_judge.py
-│   │   └── audit_integrity_judge.py
-│   ├── artifacts/
-│   │   └── .gitkeep
-│   ├── configs/
-│   │   ├── model_fleet.yaml
-│   │   └── eval_config.yaml
-│   ├── Makefile
-│   └── README.md
+│   ├── corpus_generator.py                 # Seeded 200-record cross-border corpus generator
+│   ├── harness.py                          # Evaluation harness & scorecard generator
+│   └── artifacts/
+│       ├── run_20261122.jsonl              # Per-record execution logs
+│       └── summary_20261122.json           # Aggregated evaluation scorecard
 │
-└── docs/
-    ├── schema.sql                          # ★ Canonical DDL (sibling file)
-    ├── razorpay_api_reference.md
-    ├── rbi_compliance_reference.md
-    └── feters_purpose_codes.csv
+├── frontend/
+│   └── index.html                          # Zero-build Tailwind CSS Inspector UI
+│
+└── scripts/
+    ├── __init__.py
+    └── check_boundary.py                   # G2 Boundary Isolation enforcement script
 ```
 
 ---

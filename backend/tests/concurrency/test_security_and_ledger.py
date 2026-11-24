@@ -400,6 +400,21 @@ class TestApprovalLockConcurrency:
         assert s2 == 409
         assert r2 == "TOKEN_ALREADY_USED_OR_EXPIRED"
 
+    def test_mixed_timezone_expiry_detected(self):
+        """Ensure tokens expiring in UTC are properly expired when reviewed in another timezone offset (e.g. +05:30)."""
+        conn = self._make_conn()
+        token = str(uuid.uuid4())
+        # Token expires at 10:00:00 UTC
+        expires_at_utc = "2026-11-24T10:00:00+00:00"
+        create_pending_approval(conn, token, "EXC-TZ", expires_at_utc)
+
+        # Review time is 15:31:00 +05:30 (which is 10:01:00 UTC -> EXPIRED)
+        now_ist = "2026-11-24T15:31:00+05:30"
+        ok, status, reason = consume_approval_token(conn, token, "reviewer", now_ist)
+        assert ok is False
+        assert status == 409
+        assert reason == "TOKEN_ALREADY_USED_OR_EXPIRED"
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 4. G5 Tamper-Evident Audit Hash Chain
@@ -530,3 +545,21 @@ class TestAuditHashChain:
         ).fetchone()
         assert row is not None
         assert row[0] == "0" * 64
+
+    def test_tamper_event_type_on_row_2_detected(self):
+        """Directly mutating event_type on row 2 must be detected by verify_chain."""
+        conn = self._make_conn()
+        base_time = datetime(2026, 11, 22, 15, 0, 0, tzinfo=timezone.utc)
+        for i in range(self.NUM_EVENTS):
+            ts = (base_time + timedelta(seconds=i)).isoformat()
+            append_event(conn, f"ORIGINAL_TYPE_{i}", {"index": i}, ts)
+
+        conn.execute(
+            "UPDATE audit_events SET event_type = 'FORGED_TYPE' WHERE seq = 2"
+        )
+        conn.commit()
+
+        ok, broken_seq, reason = verify_chain(conn)
+        assert ok is False
+        assert broken_seq == 2
+        assert "event_hash mismatch" in reason

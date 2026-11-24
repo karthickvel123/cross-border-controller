@@ -4,6 +4,9 @@
 
 > **One-Line Pitch:** A deterministic, tamper-evident finance controller executing the **Cross-Border Settlement-to-Compliance loop for Indian Exporters**—pairing exact integer arithmetic with bounded, FactSet-grounded AI to eliminate hallucinations, silent rounding losses, and regulatory drift.
 
+🌐 **Live Hosted Sandbox:** [https://cross-border-controller.onrender.com/](https://cross-border-controller.onrender.com/)  
+*(Note: Render free tier spins down on idle; initial cold start may take ~30–50s to bootstrap).*
+
 **The Finance-Ops Loop:**
 - **Exact Payout Recon:** Ingests Razorpay settlements across USD, EUR, GBP, SGD; computes exact FX, fees (3% card / 1% MoneySaver), and 18% GST down to the exact paisa.
 - **Residue Investigation:** Detects non-zero residues (e.g. SWIFT intermediary deductions, split settlements) and routes them to a bounded, FactSet-grounded AI investigator with 0 ungrounded claims.
@@ -26,7 +29,7 @@ Evaluated on 200 records (110 Happy, 40 Ambiguous, 30 Policy, 20 Adversarial):
 | **Ungrounded AI Claim Leak Rate** | **`0.0%`** (0 ungrounded claims) | `24.0%` (48 ungrounded claims leaked) | ✅ PASS (0.0% leak) |
 | **FactSet Gate Stress Test (Injections Blocked)** | **`100.0%`** (48/48 caught & blocked) | `0.0%` (0 blocked without gate) | ✅ 100% BLOCKED |
 | **Total Discrepancy ₹ at Risk Flagged** | **`₹597,978.14`** honestly in exception queue | `₹0.00` (silently lost / unrouted) | ✅ HONEST QUEUE |
-| **p95 Latency (Per-Record)** | **`0.113 ms`** | `0.007 ms` (naive baseline) | |
+| **p95 Latency (Per-Record)** | **`0.092 ms`** | `0.007 ms` (naive baseline) | |
 
 > Note: The Ablation Baseline is an internal control ablation (measuring impact when Decimal math, regulatory compliance checks, and FactSet gating are removed), not a third-party benchmark.
 
@@ -43,7 +46,7 @@ Enforced via `.importlinter` and CI gates:
 | **FactSet Gate** | `backend/src/verifier/factset_gate.py` | Pydantic, re, stdlib | **G3:** Verbatim token matching against FactSet allowlist. |
 | **Atomic Approval** | `backend/src/audit_ledger/approval_lock.py` | sqlite3, threading | **G4:** Single-use conditional UPDATE (`rowcount == 1`). |
 | **Audit Ledger** | `backend/src/audit_ledger/hash_chain.py` | sqlite3, hashlib, json | **G5:** Tamper-evident SHA-256 chain from `0*64`. |
-| **Bounded AI** | `backend/src/llm_layer/` | `litellm` (optional), Pydantic | **Read-Only:** Zero financial writes; XML isolation; G3 gate. |
+| **Bounded AI** | `backend/src/llm_layer/` | `litellm` (optional), httpx, Pydantic | **Read-Only:** Zero financial writes; XML isolation; G3 gate. |
 
 ---
 
@@ -52,7 +55,8 @@ Enforced via `.importlinter` and CI gates:
 Python 3.12 / 3.13; zero external keys or Docker:
 
 ```bash
-pytest backend/tests/ -v                         # 1. Run all 141 tests
+pip install -r requirements.txt                  # Install core runtime dependencies
+pytest backend/tests/ -v                         # 1. Run all 149 tests
 python -m eval.harness --dry-run --seed 20261122 # 2. Run 200-record eval
 uvicorn backend.src.main:app --reload            # 3. Start API + Inspector
 ```
@@ -72,7 +76,7 @@ uvicorn backend.src.main:app --reload            # 3. Start API + Inspector
 
 ### G3 — Verbatim FactSet Provenance Gate
 - Every LLM hypothesis passes through `verify_hypothesis_against_factset`.
-- The verifier scans both cited fields and free-text rationale via regex for Razorpay IDs (`pay_...`), UTRs, FETERS purpose codes (`P0802`, `S0002`), and explicit rupee figures.
+- The verifier scans both cited fields and free-text rationale via regex for Razorpay IDs (`pay_...`), UTRs, FETERS purpose codes (`P0802`, `S0002`), rupee figures, and foreign currency amounts (`$`, `USD`, `EUR`, `€`, `GBP`, `£`, `SGD`).
 - If ANY cited token is absent from the verified `FactSetSnapshot`, the result is rejected as `ABSTAINED_UNGROUNDED`, and the category is forced to `ABSTAINED`.
 
 ### G4 — Atomic Single-Use Approval Lock
@@ -83,12 +87,12 @@ uvicorn backend.src.main:app --reload            # 3. Start API + Inspector
      SET status = 'APPROVED', reviewed_by = ?, reviewed_at = ?
    WHERE approval_token = ? AND status = 'PENDING' AND expires_at > ?
   ```
-- Asserts `rowcount == 1`. Verified under a 20-worker concurrent thread race: exactly 1 worker obtains HTTP 200, while 19 receive HTTP 409 Conflict.
+- Asserts `rowcount == 1`. Verified under a 20-worker concurrent thread race: exactly 1 worker obtains HTTP 200, while 19 receive HTTP 409 Conflict. Normalized UTC timestamps prevent timezone offset bypasses.
 
 ### G5 — Cryptographic SHA-256 Audit Chain
 - Every critical system event is committed to `audit_events`.
-- Each block stores `prev_hash` and `event_hash = SHA256(prev_hash | canonical_json | timestamp_iso)`.
-- `verify_chain` recomputes and validates the entire chain from genesis `0 * 64`, detecting tampering immediately with the exact broken sequence number.
+- Each block stores `prev_hash` and `event_hash = SHA256(prev_hash | event_type | canonical_json | timestamp_iso)`.
+- `verify_chain` recomputes and validates the entire chain from genesis `0 * 64`, detecting payload, hash, or event_type tampering immediately with the exact broken sequence number.
 
 ---
 
@@ -123,6 +127,8 @@ cross-border-controller/
 │   └── artifacts/                      # Run JSONL and summary JSON output
 ├── frontend/
 │   └── index.html                      # Zero-build Tailwind CSS Inspector UI
+├── scripts/
+│   └── check_boundary.py               # G2 Boundary Isolation enforcement script
 ├── .github/workflows/ci.yml            # Automated CI workflow
 ├── Makefile                            # Top-level make targets (test, eval-dry, etc.)
 ├── EVALUATION.md                       # Complete benchmark evaluation report
@@ -146,7 +152,14 @@ The deterministic core models and validates compliance against official Indian r
   - Requires pre-capture EDF on ICICI MoneySaver Export accounts before capture.
 - **Income-tax Act, 2025 Section 394(1) (FY 2026-27 LRS TCS):**
   - Models the ₹10,00,000 cumulative annual exemption threshold and the 20% TCS slab on remittances exceeding ₹10L.
-  - Honors the statutory 0% TCS exemption for NRI remittances from NRO balances up to $1M under FEMA Section 394(1).
+  - Honors the statutory 0% TCS exemption for NRI remittances from NRO balances up to $1M under FEMA Remittance of Assets Regulations (0% TCS under Income-tax Act, 2025 Section 394(1)).
 
 > **Configurable Policy Constants:** All regulatory limits (₹25L PA-CB cap, ₹10L TCS threshold, 20% TCS rate, 270d/365d EDPMS realization windows) and fee rate cards (3% card fee, 1% MoneySaver fee, 18% GST) are maintained as configurable deterministic constants in `backend/src/deterministic_core/` rather than hardcoded logic, enabling seamless updates as circulars evolve.
 
+---
+
+## 8. Known V1 Limitations
+
+1. **Ephemeral Hosted SQLite:** The hosted Render sandbox runs with an in-memory / local SQLite WAL file that resets on deployment restarts. Production DDL targeting persistent PostgreSQL 16 is fully mapped in `docs/schema.sql`.
+2. **Regex-Scoped FactSet Gate:** The G3 FactSet Gate enforces strict exact-match allowlists on Razorpay IDs, UTRs, FETERS codes, and numbers formatted as numerals, decimals, or currency subunits (`₹`, `$`, `USD`, `EUR`, `paise`). It does not currently parse amounts written out purely as English words (e.g. "five lakh rupees").
+3. **Hosted Simulation Default (`DATA_MODE=sim`):** By default, the live hosted sandbox operates in deterministic simulation mode (`DATA_MODE=sim`) to provide 24/7 uptime without requiring external third-party API credentials or network dependencies.

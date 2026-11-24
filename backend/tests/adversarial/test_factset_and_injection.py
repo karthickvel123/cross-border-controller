@@ -126,6 +126,65 @@ def test_hallucinated_cited_amount_paise(clean_factset: FactSetSnapshot):
     assert "99900" in result.ungrounded_tokens
 
 
+def test_100x_bypass_rupee_amount_abstained(clean_factset: FactSetSnapshot):
+    """₹150,000 must NOT match 150000 paise (₹1,500) and must be rejected as ungrounded."""
+    result = verify_hypothesis_against_factset(
+        proposed_rationale="Discrepancy of ₹150,000 claimed for order_12345678.",
+        cited_amounts_paise=[],
+        cited_utrs=[],
+        cited_entity_ids=["order_12345678"],
+        cited_feters_codes=[],
+        factset=clean_factset,
+    )
+
+    assert result.verified is False
+    assert result.status == "ABSTAINED_UNGROUNDED"
+    assert any("150,000" in t for t in result.ungrounded_tokens)
+
+
+def test_hallucinated_foreign_currency_abstained(clean_factset: FactSetSnapshot):
+    """Ungrounded foreign currency figures ($9,500, USD 400) must be rejected."""
+    result = verify_hypothesis_against_factset(
+        proposed_rationale="Intermediary deducted $9,500 SWIFT fee and USD 400 for order_12345678.",
+        cited_amounts_paise=[],
+        cited_utrs=[],
+        cited_entity_ids=["order_12345678"],
+        cited_feters_codes=[],
+        factset=clean_factset,
+    )
+
+    assert result.verified is False
+    assert result.status == "ABSTAINED_UNGROUNDED"
+    assert any("9,500" in t for t in result.ungrounded_tokens)
+    assert any("400" in t for t in result.ungrounded_tokens)
+
+
+def test_explicit_paise_allowed_and_hallucinated(clean_factset: FactSetSnapshot):
+    """Explicit '150000 paise' is allowed; explicit '200000 paise' is rejected."""
+    res_ok = verify_hypothesis_against_factset(
+        proposed_rationale="Settled exactly 150000 paise for order_12345678.",
+        cited_amounts_paise=[],
+        cited_utrs=[],
+        cited_entity_ids=["order_12345678"],
+        cited_feters_codes=[],
+        factset=clean_factset,
+    )
+    assert res_ok.verified is True
+    assert res_ok.status == "FACTSET_VERIFIED"
+
+    res_bad = verify_hypothesis_against_factset(
+        proposed_rationale="Settled 200000 paise for order_12345678.",
+        cited_amounts_paise=[],
+        cited_utrs=[],
+        cited_entity_ids=["order_12345678"],
+        cited_feters_codes=[],
+        factset=clean_factset,
+    )
+    assert res_bad.verified is False
+    assert res_bad.status == "ABSTAINED_UNGROUNDED"
+    assert any("200000" in t for t in res_bad.ungrounded_tokens)
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # 3. Hallucinated Entities, UTRs, and FETERS Codes
 # ═════════════════════════════════════════════════════════════════════════════
